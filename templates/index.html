@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vulnerability Findings Manager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'JetBrains Mono', monospace; }
+        
+        /* Smooth scrolling for textarea */
+        textarea::-webkit-scrollbar { width: 6px; }
+        textarea::-webkit-scrollbar-track { background: transparent; }
+        textarea::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 3px; }
+        textarea::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
+        
+        /* Sidebar Scrollbar */
+        #resultsList::-webkit-scrollbar { width: 6px; }
+        #resultsList::-webkit-scrollbar-track { background: transparent; }
+        #resultsList::-webkit-scrollbar-thumb { background-color: #e2e8f0; border-radius: 3px; }
+
+        /* Custom inputs */
+        .input-group:focus-within label { color: #10b981; }
+        .input-group:focus-within input, 
+        .input-group:focus-within textarea { border-color: #10b981; ring: 2px; }
+        
+        /* Transitions */
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .active-item { background-color: #ecfdf5; border-color: #d1fae5; }
+        .active-item .title-text { color: #047857; }
+        
+        /* SVG Icon Classes */
+        .icon-sm { width: 16px; height: 16px; }
+        .icon-md { width: 20px; height: 20px; }
+        .icon-xs { width: 14px; height: 14px; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen flex flex-col overflow-hidden">
+
+    <!-- Navbar -->
+    <header class="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-6 shrink-0 z-30 shadow-sm relative">
+        <div class="flex items-center gap-3">
+            <div class="bg-slate-900 text-white p-1.5 rounded-lg">
+                <!-- Shield Icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon-md" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+            </div>
+            <h1 class="text-lg font-bold tracking-tight text-slate-900">Findings<span class="text-slate-400 font-medium">Manager</span></h1>
+        </div>
+
+        <div class="flex items-center gap-4">
+            <!-- Database Status -->
+            <div id="dbStatus" class="hidden flex items-center gap-2 text-xs font-medium text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100">
+                <span class="relative flex h-2 w-2">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+                <span id="recordCount">0</span> Records Loaded
+            </div>
+
+            <!-- Import Button -->
+            <label class="cursor-pointer group flex items-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm hover:shadow-md">
+                <!-- Upload Icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon-sm text-slate-400 group-hover:text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M12 12v9"/><path d="m16 16-4-4-4 4"/></svg>
+                Import New
+                <input type="file" id="fileInput" class="hidden" accept=".xml,.txt">
+            </label>
+            
+            <!-- Export Button -->
+            <button onclick="exportReport()" class="flex items-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-md hover:shadow-lg">
+                <!-- Download Icon -->
+                <svg xmlns="http://www.w3.org/2000/svg" class="icon-sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                Export JSON
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Layout -->
+    <div class="flex flex-1 overflow-hidden">
+        
+        <!-- Sidebar / Navigation List -->
+        <aside class="w-80 bg-white border-r border-slate-200 flex flex-col z-20 shadow-lg h-full">
+            <!-- Search Header -->
+            <div class="p-4 border-b border-slate-100 bg-slate-50/50">
+                <div class="relative">
+                    <!-- Search Icon -->
+                    <div class="absolute left-3 top-2.5 w-4 h-4 text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    </div>
+                    <input type="text" id="searchInput" placeholder="Filter findings..." 
+                        class="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all shadow-sm">
+                </div>
+                <div class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-3 pl-1 flex justify-between">
+                    <span>Library</span>
+                    <span id="listCount">0 items</span>
+                </div>
+            </div>
+            
+            <!-- List Container -->
+            <div id="resultsList" class="flex-1 overflow-y-auto p-2 space-y-1">
+                <!-- List Items will be injected here -->
+                <div class="text-center p-8 text-slate-400 text-sm">
+                    <!-- Loader Icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 mx-auto mb-2 animate-spin opacity-50" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                    <p>Loading library...</p>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Editor Canvas -->
+        <main class="flex-1 overflow-y-auto bg-slate-50/50 p-6 md:p-10 relative">
+            <div class="max-w-5xl mx-auto space-y-6 fade-in pb-20">
+                
+                <!-- Finding Header -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:p-8">
+                    <div class="input-group space-y-1.5">
+                        <label class="text-xs font-bold uppercase text-slate-400 tracking-wider">Finding Title</label>
+                        <input type="text" id="fieldTitle" placeholder="e.g. Stored Cross-Site Scripting" 
+                            class="w-full text-2xl font-bold text-slate-900 placeholder-slate-300 border-0 border-b-2 border-slate-100 focus:border-emerald-500 focus:ring-0 px-0 py-2 bg-transparent transition-colors">
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-12 gap-6">
+                    
+                    <!-- Left Column: Details -->
+                    <div class="col-span-12 lg:col-span-8 space-y-6">
+                        
+                        <!-- Description -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 input-group">
+                            <label class="flex items-center gap-2 text-xs font-bold uppercase text-slate-500 tracking-wider mb-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="16" x2="8" y1="13" y2="13"/><line x1="16" x2="8" y1="17" y2="17"/><line x1="10" x2="8" y1="9" y2="9"/></svg>
+                                Description
+                            </label>
+                            <textarea id="fieldDesc" rows="6" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm leading-relaxed text-slate-700 focus:bg-white focus:outline-none transition-all resize-y"></textarea>
+                        </div>
+
+                        <!-- Impact -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 input-group border-l-4 border-l-amber-400">
+                            <label class="flex items-center gap-2 text-xs font-bold uppercase text-amber-600 tracking-wider mb-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                                Impact / Threat
+                            </label>
+                            <textarea id="fieldImpact" rows="4" class="w-full p-3 bg-amber-50/30 border border-amber-200 rounded-lg text-sm leading-relaxed text-slate-700 focus:bg-white focus:outline-none transition-all resize-y"></textarea>
+                        </div>
+
+                        <!-- Remediation -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 input-group border-l-4 border-l-emerald-500">
+                            <label class="flex items-center gap-2 text-xs font-bold uppercase text-emerald-600 tracking-wider mb-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>
+                                Remediation
+                            </label>
+                            <textarea id="fieldRemediation" rows="4" class="w-full p-3 bg-emerald-50/30 border border-emerald-200 rounded-lg text-sm leading-relaxed text-slate-700 focus:bg-white focus:outline-none transition-all resize-y"></textarea>
+                        </div>
+                        
+                        <!-- Steps (Manual) -->
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 input-group">
+                            <label class="flex items-center gap-2 text-xs font-bold uppercase text-blue-600 tracking-wider mb-3">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="icon-xs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>
+                                Steps to Reproduce
+                            </label>
+                            <textarea id="fieldSteps" rows="5" placeholder="1. Navigate to...&#10;2. Enter payload..." class="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-sm font-mono text-slate-700 focus:bg-white focus:outline-none transition-all resize-y"></textarea>
+                        </div>
+
+                    </div>
+
+                    <!-- Right Column: Metadata -->
+                    <div class="col-span-12 lg:col-span-4 space-y-6">
+                        
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-5 space-y-5 sticky top-6">
+                            <h3 class="text-sm font-bold text-slate-900 border-b border-slate-200 pb-3">Classification</h3>
+                            
+                            <div>
+                                <label class="text-xs font-bold uppercase text-slate-500 block mb-1.5">CWE ID</label>
+                                <input type="text" id="fieldCWE" class="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm font-mono text-slate-700 focus:border-emerald-500 focus:outline-none">
+                            </div>
+
+                            <div>
+                                <label class="text-xs font-bold uppercase text-slate-500 block mb-1.5">CVSS Vector</label>
+                                <input type="text" id="fieldCVSS" class="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-xs font-mono text-orange-600 focus:border-emerald-500 focus:outline-none break-all">
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="text-xs font-bold uppercase text-slate-500 block mb-1.5">Likelihood</label>
+                                    <input type="text" id="fieldLikelihood" class="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm text-slate-700 focus:border-emerald-500 focus:outline-none">
+                                </div>
+                                <div>
+                                    <label class="text-xs font-bold uppercase text-slate-500 block mb-1.5">Severity</label>
+                                    <input type="text" id="fieldSeverity" class="w-full bg-white border border-slate-300 rounded-md px-3 py-2 text-sm font-bold text-slate-900 focus:border-emerald-500 focus:outline-none">
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        // --- EMBEDDED XML DATA ---
+        const DEFAULT_XML = `
+<CombinedData>
+<Vulns>
+<Vuln>
+<Id>1</Id>
+<Title>HttpOnly Cookie Attribute Not Set</Title>
+<CVSSVectorString>(AV:N/AC:H/Au:N/C:P/I:N/A:N)</CVSSVectorString>
+<CVSSv3VectorString>(AV:N/AC:H/PR:N/UI:R/S:C/C:L/I:N/A:N)</CVSSv3VectorString>
+<CVSSv4VectorString/>
+<FullDescription>The "HttpOnly" flag is not set on cookies containing sensitive information. The HttpOnly flag is an attribute set as part of a Set-Cookie header to prevent the cookie's value from being read or set by client-side JavaScript in browsers. Without the HttpOnly attribute, the cookie's value can be accessed by client-side scripts like JavaScript.</FullDescription>
+<ThreatCapability>Failing to set the HttpOnly flag on a cookie containing sensitive information will leave it exposed to client-side scripts and could therefore lead to its compromise in the event of a cross-site scripting attack on the application. If a session cookie is missing this flag, it can also make a session compromise easier to perform during a cross-site scripting attack since the attacker can obtain a copy of the session cookie. Note that the HttpOnly flag is not a protection against session hijacking or cross-site scripting attacks in general, it will only prevent specific attacks that rely on the ability to read cookie values from client-side scripts.</ThreatCapability>
+<FullGeneralRemediation>Ensure that the HttpOnly flag is set for all cookies.</FullGeneralRemediation>
+</Vuln>
+</Vulns>
+<StepsToReproduce>
+<StepsToReproduceId>97</StepsToReproduceId>
+<Title>Sensitive Data in Query String Parameter</Title>
+<Steps>1. Configure your browser to use a local proxy tool such as Burp Suite. 2. Log in to the application. 3. Follow the functional path: 4. $additional_steps$ 5. Observe the request in Burp Proxy History. Note that the parameter "$parameter_name$" containing $sensitive_data$ is sent in the URL as query string parameter.</Steps>
+<Captions>The application sends sensitive information such as "$sensitive_data$" in the URL.</Captions>
+<UICC>1618</UICC>
+<Parameters>
+<variable>$parameter_name$</variable>
+<description>Name of the URL parameter containing the sensitive data</description>
+<variable>$sensitive_data$</variable>
+<description>Description of sensitive data being passed in the URL, e.g., "password", "SSN", etc.</description>
+<variable>$additional_steps$</variable>
+<description>Description of any additional steps required to trigger the request sending sensitive data in the URL</description>
+</Parameters>
+</StepsToReproduce>
+<StepsToReproduce>
+<StepsToReproduceId>98</StepsToReproduceId>
+<Title>Secure Cookie Attribute Not Set</Title>
+<Steps>1. Login to the application. 2. Capture the response headers. 3. Observe that the cookie "$cookieName$" is set without the "Secure" attribute.</Steps>
+<Captions>The cookie "$cookieName$" is set without the "Secure" attribute.</Captions>
+<UICC>1486</UICC>
+<Parameters>
+<variable>$cookieName$</variable>
+<description>Name of the cookie set without Secure flag</description>
+</Parameters>
+</StepsToReproduce>
+</CombinedData>`;
+
+        // State
+        let db = [];
+        let selectedId = null;
+
+        // DOM Elements
+        const fileInput = document.getElementById('fileInput');
+        const searchInput = document.getElementById('searchInput');
+        const resultsList = document.getElementById('resultsList');
+        const recordCount = document.getElementById('recordCount');
+        const listCount = document.getElementById('listCount');
+        const dbStatus = document.getElementById('dbStatus');
+        
+        // Form Fields
+        const form = {
+            title: document.getElementById('fieldTitle'),
+            desc: document.getElementById('fieldDesc'),
+            impact: document.getElementById('fieldImpact'),
+            remediation: document.getElementById('fieldRemediation'),
+            steps: document.getElementById('fieldSteps'),
+            cwe: document.getElementById('fieldCWE'),
+            cvss: document.getElementById('fieldCVSS'),
+            likelihood: document.getElementById('fieldLikelihood'),
+            severity: document.getElementById('fieldSeverity'),
+        };
+
+        // --- Core XML Processing Function ---
+        function processXML(text) {
+            try {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(text, "text/xml");
+                
+                if (xmlDoc.getElementsByTagName("parsererror").length > 0) {
+                    throw new Error("Invalid XML");
+                }
+
+                // Parse 'Vuln' tags
+                const vulns = Array.from(xmlDoc.getElementsByTagName("Vuln"));
+                const steps = Array.from(xmlDoc.getElementsByTagName("StepsToReproduce"));
+
+                const parsedVulns = vulns.map(v => ({
+                    id: v.getElementsByTagName("Id")[0]?.textContent || "V" + Math.random().toString(36).substr(2, 5),
+                    title: v.getElementsByTagName("Title")[0]?.textContent || "",
+                    cvss: v.getElementsByTagName("CVSSv3VectorString")[0]?.textContent || v.getElementsByTagName("CVSSVectorString")[0]?.textContent || "",
+                    description: v.getElementsByTagName("FullDescription")[0]?.textContent || "",
+                    threat: v.getElementsByTagName("ThreatCapability")[0]?.textContent || "",
+                    remediation: v.getElementsByTagName("FullGeneralRemediation")[0]?.textContent || v.getElementsByTagName("FullGeneralRemed")[0]?.textContent || "",
+                    cwe: v.getElementsByTagName("CWEPrimaryNumber")[0]?.textContent || "",
+                    likelihood: v.getElementsByTagName("NIST5PtLikelihood")[0]?.textContent || "",
+                    severity: v.getElementsByTagName("NIST5PtImpact")[0]?.textContent || "",
+                    type: "vuln"
+                }));
+
+                const parsedSteps = steps.map(s => ({
+                     id: s.getElementsByTagName("StepsToReproduceId")[0]?.textContent || "S" + Math.random().toString(36).substr(2, 5),
+                     title: s.getElementsByTagName("Title")[0]?.textContent || "",
+                     description: "", 
+                     threat: "",
+                     remediation: "",
+                     steps_text: s.getElementsByTagName("Steps")[0]?.textContent || "",
+                     type: "step"
+                }));
+
+                // Combine and sort alphabetically
+                db = [...parsedVulns, ...parsedSteps].sort((a, b) => a.title.localeCompare(b.title));
+
+                // Update UI Stats
+                recordCount.textContent = db.length;
+                dbStatus.classList.remove('hidden');
+                
+                // Render ALL items immediately
+                renderResults(db); 
+                
+                return db.length;
+
+            } catch (err) {
+                console.error(err);
+                alert("Error parsing XML data.");
+                return 0;
+            }
+        }
+
+        // --- 1. XML Import Logic ---
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if(!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const count = processXML(e.target.result);
+                if(count > 0) alert(`Successfully imported ${count} items.`);
+            };
+            reader.readAsText(file);
+        });
+
+        // --- 2. Auto Load Logic ---
+        window.addEventListener('load', () => {
+            processXML(DEFAULT_XML);
+        });
+
+        // --- 3. Search Logic ---
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            
+            if (db.length === 0) return;
+            
+            // Filter
+            const filtered = db.filter(item => 
+                item.title.toLowerCase().includes(query) || 
+                item.id.toString().includes(query) ||
+                (item.cwe && item.cwe.toLowerCase().includes(query))
+            );
+
+            renderResults(filtered);
+        });
+
+        function renderResults(items) {
+            resultsList.innerHTML = '';
+            listCount.textContent = `${items.length} items`;
+            
+            if (items.length === 0) {
+                resultsList.innerHTML = `<div class="p-4 text-center text-slate-400 text-sm">No matches found</div>`;
+                return;
+            }
+
+            // Icons as strings for list items
+            const icons = {
+                vuln: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>`,
+                step: `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-400"><line x1="8" x2="21" y1="6" y2="6"/><line x1="8" x2="21" y1="12" y2="12"/><line x1="8" x2="21" y1="18" y2="18"/><line x1="3" x2="3.01" y1="6" y2="6"/><line x1="3" x2="3.01" y1="12" y2="12"/><line x1="3" x2="3.01" y1="18" y2="18"/></svg>`
+            };
+
+            const fragment = document.createDocumentFragment();
+
+            items.forEach(item => {
+                const el = document.createElement('div');
+                el.className = `p-2.5 mx-2 rounded-lg cursor-pointer hover:bg-slate-50 border border-transparent hover:border-slate-200 transition-all group ${item.id === selectedId ? 'active-item' : ''}`;
+                el.id = `item-${item.id}`;
+                
+                // Icon based on type
+                const icon = item.type === 'step' ? icons.step : icons.vuln;
+                
+                el.innerHTML = `
+                    <div class="flex items-start gap-2.5">
+                        <div class="mt-0.5 shrink-0">${icon}</div>
+                        <div class="min-w-0">
+                            <div class="text-sm font-medium text-slate-700 group-hover:text-emerald-700 truncate title-text leading-tight mb-1">${item.title}</div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-[10px] font-mono bg-slate-100 text-slate-500 px-1.5 rounded border border-slate-200">ID: ${item.id}</span>
+                                ${item.cwe ? `<span class="text-[10px] font-mono bg-blue-50 text-blue-600 px-1.5 rounded border border-blue-100">${item.cwe}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                el.onclick = () => loadFinding(item);
+                fragment.appendChild(el);
+            });
+
+            resultsList.appendChild(fragment);
+        }
+
+        // --- 4. Autofill Logic ---
+        function loadFinding(item) {
+            // Update selected visual state
+            if (selectedId) {
+                const prev = document.getElementById(`item-${selectedId}`);
+                if (prev) prev.classList.remove('active-item');
+            }
+            selectedId = item.id;
+            const curr = document.getElementById(`item-${item.id}`);
+            if (curr) curr.classList.add('active-item');
+
+            // Fill Form
+            form.title.value = item.title;
+            
+            if(item.type === 'vuln') {
+                form.desc.value = item.description;
+                form.impact.value = item.threat;
+                form.remediation.value = item.remediation;
+                form.cwe.value = item.cwe;
+                form.cvss.value = item.cvss;
+                form.likelihood.value = item.likelihood;
+                form.severity.value = item.severity;
+                form.steps.value = "1. Navigate to the application.\n2. Identify the input vector...\n3. Observe the vulnerability.";
+            } else if (item.type === 'step') {
+                form.steps.value = item.steps_text;
+                // Preserve description if switching from a generic template
+                if (!form.desc.value) form.desc.value = "See Steps to Reproduce.";
+            }
+        }
+
+        // --- 5. Export Logic ---
+        window.exportReport = function() {
+            const data = {
+                title: form.title.value,
+                description: form.desc.value,
+                impact: form.impact.value,
+                remediation: form.remediation.value,
+                reproduction_steps: form.steps.value,
+                metadata: {
+                    cwe: form.cwe.value,
+                    cvss_vector: form.cvss.value,
+                    likelihood: form.likelihood.value,
+                    severity: form.severity.value,
+                    generated_at: new Date().toISOString()
+                }
+            };
+
+            const jsonStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([jsonStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `finding-${Date.now()}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        };
+
+    </script>
+</body>
+</html>
